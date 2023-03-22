@@ -8,6 +8,7 @@
         let ingredients = null
         let result = null
         let densityList = null
+        let mainError = null
 
         let solTemplate = null
         let elemTemplate = null
@@ -39,14 +40,18 @@
         function extractSolution(ing) {
             const amount = ing.querySelector('[name="amount"]')
             const amountUnit = ing.querySelector('[name="amount-unit"]')
+            const err = ing.querySelector('.solution-error')
             const elems = []
             amount.placeholder = ""
+            err.innerText = ""
             for (const elem of ing.querySelectorAll('.element')) {
                 const name = elem.querySelector('[name="element"]')
                 const concen = elem.querySelector('[name="concen"]')
                 const concenUnit = elem.querySelector('[name="concen-unit"]')
+                const err = elem.querySelector('.element-error')
                 name.placeholder = ""
                 concen.placeholder = ""
+                err.innerText = ""
                 if (!name.value) {
                     if (concen.value) name.placeholder = "Name this element"
                     continue
@@ -59,6 +64,9 @@
                     set: (txt) => {
                         concen.placeholder = txt
                     },
+                    setError: (txt) => {
+                        err.innerText = txt
+                    },
                 })
             }
             return {
@@ -70,6 +78,9 @@
                 set: (txt) => {
                     amount.placeholder = txt
                 },
+                setError: (txt) => {
+                    err.innerText = txt
+                }
             }
         }
 
@@ -95,10 +106,15 @@
                 dens[elemName] = density
             }
 
+            mainError.innerText = ""
+
             return {
                 ingredients: ingrs,
                 result: res,
                 density: (name) => name in dens ? dens[name] : NaN,
+                setError: (txt) => {
+                    mainError.innerText = txt
+                },
             }
         }
 
@@ -162,6 +178,7 @@
                     if (isNaN(elem.concen)) {
                         missing = true
                         elem.set("Concentration is required")
+                        ing.setError("Missing concentrations")
                     }
                 }
             }
@@ -238,6 +255,7 @@
                         // We need density information that we don't have
                         console.log(`need density for mixed amount and concentration for element ${elem.name}`)
                         densityMessages[elem.name] = "Density required"
+                        elem.setError("Missing element density")
                         missing = true
                         continue
                     }
@@ -265,8 +283,14 @@
                             for (const subElem of ing.densityMissing) {
                                 densityMessages[subElem] = "Density required"
                             }
+                            if (ing.densityMissing.length > 0) {
+                                ing.setError("Missing ingredient density")
+                            } else {
+                                ing.setError("Ingredient has unknown elements and its density cannot be computed")
+                            }
                         } else {
                             densityMessages[elem.name] = "Density required"
+                            elem.setError("Missing element density")
                         }
                         missing = true
                         continue
@@ -331,11 +355,11 @@
                         let x = sol['i-' + ing.index] || 0
                         x = x / ing.multiplier
                         let s = (Math.round(x * prec) / prec).toString()
-                        if (x < 0) s += '!'
                         ing.set(s)
                     }
                 }
             } else {
+                info.setError("Mixture is infeasible")
                 for (const ing of generalIngrs) {
                     if (isNaN(ing.amount)) {
                         ing.set("!")
@@ -382,6 +406,7 @@
             ingredients = document.getElementById('ingredients')
             result = document.getElementById('result')
             densityList = document.getElementById('density-list')
+            mainError = document.getElementById('main-error')
 
             ingredients.lastElementChild.addEventListener('click', () => addIngredient())
 
@@ -438,6 +463,11 @@
 
         .element {
             display: flex;
+            flex-direction: column;
+        }
+
+        .element-row {
+            display: flex;
             flex-direction: row;
             align-items: center;
             gap: 10px;
@@ -484,35 +514,44 @@
             border-radius: 4px;
             padding: 0 4px;
         }
+
+        .error {
+            color: red;
+            font-size: 12px;
+        }
     </style>
 </head>
 
 <body>
     <template id="elem-template">
         <div class="element">
-            <div class="solution-input">
-                <span>Element name</span>
-                <input name="element" type="text" />
-            </div>
-            <div class="solution-input">
-                <span>Concentration</span>
-                <div>
-                    <input name="concen" type="number" />
-                    <select name="concen-unit">
-                        <!--option value="mmc">g/100g</option-->
-                        <!--option value="mvc">g/100mL</option-->
-                        <!--option value="vvm">ml/L</option-->
-                        <option value="vvc">mL/100mL</option>
-                        <option value="mvm">g/L</option>
-                        <option value="mmm">g/kg</option>
-                    </select>
+            <div class="element-row">
+                <div class="solution-input">
+                    <span>Element name</span>
+                    <input name="element" type="text" />
+                </div>
+                <div class="solution-input">
+                    <span>Concentration</span>
+                    <div>
+                        <input name="concen" type="number" />
+                        <select name="concen-unit">
+                            <!--option value="mmc">g/100g</option-->
+                            <!--option value="mvc">g/100mL</option-->
+                            <!--option value="vvm">ml/L</option-->
+                            <option value="vvc">mL/100mL</option>
+                            <option value="mvm">g/L</option>
+                            <option value="mmm">g/kg</option>
+                        </select>
+                    </div>
                 </div>
             </div>
+            <div class="error element-error"></div>
         </div>
     </template>
 
     <template id="sol-template">
         <div class="solution">
+            <div class="error solution-error"></div>
             <div>
                 <input name="solution-name" type="text" class="solution-name" />
             </div>
@@ -553,6 +592,7 @@
         <br />
 
         <h2>Result</h2>
+        <div id="main-error" class="error"></div>
         <div id="result" class="solution-list">
         </div>
         <br />
