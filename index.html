@@ -10,7 +10,7 @@
         let densityList = null
         let mainError = null
 
-        let solTemplate = null
+        let mixtTemplate = null
         let elemTemplate = null
         let densityTemplate = null
 
@@ -37,10 +37,10 @@
             return NaN
         }
 
-        function extractSolution(ing) {
+        function extractMixture(ing) {
             const amount = ing.querySelector('[name="amount"]')
             const amountUnit = ing.querySelector('[name="amount-unit"]')
-            const err = ing.querySelector('.solution-error')
+            const err = ing.querySelector('.mixture-error')
             const elems = []
             amount.placeholder = ""
             err.innerText = ""
@@ -70,7 +70,7 @@
                 })
             }
             return {
-                name: ing.querySelector('[name="solution-name"]').value,
+                name: ing.querySelector('[name="mixture-name"]').value,
                 amount: parseFloat(amount.value) * unitMultipliers[amountUnit.value[1]],
                 amountDim: amountUnit.value[0],
                 multiplier: unitMultipliers[amountUnit.value[1]],
@@ -87,15 +87,15 @@
         function extractInfo() {
             const ingrs = []
             let i = 0
-            for (const ing of ingredients.querySelectorAll('.solution')) {
-                const ingInfo = extractSolution(ing)
+            for (const ing of ingredients.querySelectorAll('.mixture')) {
+                const ingInfo = extractMixture(ing)
                 ingInfo.index = i
                 ingInfo.sign = 1
                 ingrs.push(ingInfo)
                 i += 1
             }
 
-            const res = extractSolution(result.firstElementChild)
+            const res = extractMixture(result.firstElementChild)
             res.index = ingrs.length
             res.sign = -1
 
@@ -187,7 +187,7 @@
                 return
             }
 
-            // Try to determine solution densities
+            // Try to determine mixture densities
             for (const ing of generalIngrs) {
                 ing.density = NaN
                 ing.densityMissing = []
@@ -377,10 +377,10 @@
             }
         }
 
-        function createSolution(name) {
-            const sol = solTemplate.content.firstElementChild.cloneNode(true)
-            sol.querySelector('.solution-name').value = name
-            const elems = sol.querySelector(".element-list")
+        function createMixture(name) {
+            const mixt = mixtTemplate.content.firstElementChild.cloneNode(true)
+            mixt.querySelector('.mixture-name').value = name
+            const elems = mixt.querySelector(".element-list")
             function addElement(dontRecompute) {
                 const newElem = elemTemplate.content.firstElementChild.cloneNode(true)
                 elems.insertBefore(newElem, elems.lastElementChild)
@@ -388,19 +388,19 @@
                 if (!dontRecompute) recompute()
             }
             addElement(true)
-            sol.querySelector('.add-element').addEventListener('click', () => addElement())
-            hookRecompute(sol)
-            return sol
+            mixt.querySelector('.add-element').addEventListener('click', () => addElement())
+            hookRecompute(mixt)
+            return mixt
         }
 
         function addIngredient(dontRecompute) {
             const name = `Mixture #${ingredients.children.length}`
-            ingredients.insertBefore(createSolution(name), ingredients.lastElementChild)
+            ingredients.insertBefore(createMixture(name), ingredients.lastElementChild)
             if (!dontRecompute) recompute()
         }
 
         function onLoad() {
-            solTemplate = document.getElementById('sol-template')
+            mixtTemplate = document.getElementById('mixt-template')
             elemTemplate = document.getElementById('elem-template')
             densityTemplate = document.getElementById('density-template')
             ingredients = document.getElementById('ingredients')
@@ -411,7 +411,7 @@
             ingredients.lastElementChild.addEventListener('click', () => addIngredient())
 
             addIngredient(true)
-            result.appendChild(createSolution("Result"))
+            result.appendChild(createMixture("Result"))
 
             recompute()
         }
@@ -433,7 +433,7 @@
             margin: 0;
         }
 
-        .add-solution {
+        .add-mixture {
             height: 30px;
             padding: 0 10px;
             display: block;
@@ -442,7 +442,7 @@
             border-radius: 4px;
         }
 
-        .add-solution:active {
+        .add-mixture:active {
             background: darkgray;
             border: 1px solid lightgray;
         }
@@ -473,20 +473,20 @@
             gap: 10px;
         }
 
-        .solution-input {
+        .mixture-input {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
         }
 
-        .solution-list {
+        .mixture-list {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
             gap: 25px;
         }
 
-        .solution {
+        .mixture {
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -495,7 +495,7 @@
             padding: 10px;
         }
 
-        .solution-name {
+        .mixture-name {
             background: none;
             border: 0;
             border-radius: 4px;
@@ -526,11 +526,11 @@
     <template id="elem-template">
         <div class="element">
             <div class="element-row">
-                <div class="solution-input">
+                <div class="mixture-input">
                     <span>Element name</span>
                     <input name="element" type="text" />
                 </div>
-                <div class="solution-input">
+                <div class="mixture-input">
                     <span>Concentration</span>
                     <div>
                         <input name="concen" type="number" />
@@ -549,13 +549,13 @@
         </div>
     </template>
 
-    <template id="sol-template">
-        <div class="solution">
-            <div class="error solution-error"></div>
+    <template id="mixt-template">
+        <div class="mixture">
+            <div class="error mixture-error"></div>
             <div>
-                <input name="solution-name" type="text" class="solution-name" />
+                <input name="mixture-name" type="text" class="mixture-name" />
             </div>
-            <div class="solution-amount">
+            <div class="mixture-amount">
                 <span>Amount</span>
                 <div>
                     <input name="amount" type="number" />
@@ -584,8 +584,8 @@
     <h1>Liqalc</h1>
     <div>
         <h2>Ingredients</h2>
-        <div id="ingredients" class="solution-list">
-            <button id="add-ingredient" class="add-solution">
+        <div id="ingredients" class="mixture-list">
+            <button id="add-ingredient" class="add-mixture">
                 Add ingredient
             </button>
         </div>
@@ -593,7 +593,7 @@
 
         <h2>Result</h2>
         <div id="main-error" class="error"></div>
-        <div id="result" class="solution-list">
+        <div id="result" class="mixture-list">
         </div>
         <br />
 
