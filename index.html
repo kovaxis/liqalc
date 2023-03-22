@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <script src="https://unpkg.com/javascript-lp-solver/prod/solver.js"></script>
+    <script>
+        let ingredients = null
+        let result = null
+        let densityList = null
+
+        let solTemplate = null
+        let elemTemplate = null
+        let densityTemplate = null
+
+        // solve a system of equations.
+        // complexity: O(min(N, M) * N * M)
+        //
+        // `a` is a list of rows
+        // the last value in each row is the result of the equation
+        // return values:
+        //  -1 -> no solutions
+        //   0 -> unique solution, stored in `ans`
+        //   n -> infinitely many solutions, one of which is stored in `ans`, with `n` degrees of freedom
+        function solveGauss(N, M, a, ans) {
+            const EPS = 1e-6
+
+            function swap(ai, aj, bi, bj) {
+                const tmp = a[bi][bj]
+                a[bi][bj] = a[ai][aj]
+                a[ai][aj] = tmp
+            }
+
+            console.log("solving system of " + N + "x" + M)
+
+            const where = []
+            for (let j = 0; j < M; j++) where.push(-1)
+            for (let j = 0, i = 0; j < M && i < N; j++) {
+                let sel = i
+                for (let k = i; k < N; k++) if (Math.abs(a[k][j]) > Math.abs(a[sel][j])) sel = k
+                if (Math.abs(a[sel][j]) < EPS) continue
+                for (let l = j; l <= M; l++) swap(sel, l, i, l)
+                where[j] = i
+
+                for (let k = 0; k < N; k++) if (k != i) {
+                    const c = a[k][j] / a[i][j]
+                    for (let l = j; l <= M; l++) a[k][l] -= a[i][l] * c
+                }
+                i++
+            }
+
+            while (ans.length) ans.pop()
+            for (let j = 0; j < M; j++) ans.push(0)
+            for (let j = 0; j < M; j++) if (where[j] != -1) ans[j] = a[where[j]][M] / a[where[j]][j]
+            for (let i = 0; i < N; i++) {
+                let sum = 0
+                for (let j = 0; j < M; j++) sum += ans[j] * a[i][j]
+                if (Math.abs(sum - a[i][M]) > EPS) return -1
+            }
+
+            let n = 0
+            for (let j = 0; j < M; j++) if (where[j] == -1) n += 1
+            return n
+
+            /*
+            // original competitive programming gaussian elimination
+            int gauss(vector<vector<double>> a, vector<double> &ans) {
+                int N = a.size(), M = a[0].size() - 1;
+
+                vector<int> where(M, -1);
+                for (int j = 0, i = 0; j < M && i < N; j++) {
+                    int sel = i;
+                    repx(k, i, N) if (abs(a[k][j]) > abs(a[sel][j])) sel = k;
+                    if (abs(a[sel][j]) < EPS) continue;
+                    repx(k, j, M + 1) swap(a[sel][k], a[i][k]);
+                    where[j] = i;
+
+                    rep(k, N) if (k != i) {
+                        double c = a[k][j] / a[i][j];
+                        repx(l, j, M + 1) a[k][l] -= a[i][l] * c;
+                    }
+                    i++;
+                }
+
+                ans.assign(M, 0);
+                rep(i, M) if (where[i] != -1) ans[i] = a[where[i]][M] / a[where[i]][i];
+                rep(i, N) {
+                    double sum = 0;
+                    rep(j, M) sum += ans[j] * a[i][j];
+                    if (abs(sum - a[i][M]) > EPS) return 0;
+                }
+
+                rep(i, M) if (where[i] == -1) return -1;
+                return 1;
+            }
+            */
+        }
+
+        function parseVal(val) {
+            val = parseFloat(val)
+            return val || null
+        }
+
+        function applyMultiplier(val, mult) {
+            if (val === null) return null
+            const mults = {
+                u: 1e-6,
+                m: 1e-3,
+                c: 1e-2,
+                d: 1e-1,
+                x: 1,
+                D: 1e1,
+                H: 1e2,
+                K: 1e3,
+                M: 1e6,
+            }
+            return val * mults[mult]
+        }
+
+        /// Convert a value between dimensions, potentially using the density of the substance
+        /// `density` may be null to signify unknown density
+        /// If the density is needed and unavailable, returns `NaN`
+        function conversionFactor(fromDim, toDim, density) {
+            if (fromDim === toDim) return 1
+            if (density === null) return NaN
+            if (fromDim === 'v' && toDim === 'm') return density
+            if (fromDim === 'm' && toDim === 'v') return 1 / density
+            return NaN
+        }
+
+        function extractSolution(ing) {
+            const amount = ing.querySelector('[name="amount"]')
+            const amountUnit = ing.querySelector('[name="amount-unit"]')
+            const elems = []
+            amount.placeholder = ""
+            for (const elem of ing.querySelectorAll('.element')) {
+                const name = elem.querySelector('[name="element"]')
+                const concen = elem.querySelector('[name="concen"]')
+                const concenUnit = elem.querySelector('[name="concen-unit"]')
+                name.placeholder = ""
+                concen.placeholder = ""
+                if (!name.value) {
+                    if (concen.value) name.placeholder = "Name this element"
+                    continue
+                }
+                elems.push({
+                    name: name.value,
+                    concen: applyMultiplier(parseVal(concen.value), concenUnit.value[2]),
+                    concenNumDim: concenUnit.value[0],
+                    concenDenDim: concenUnit.value[1],
+                    set: (txt) => {
+                        concen.placeholder = txt
+                    },
+                })
+            }
+            return {
+                name: ing.querySelector('[name="solution-name"]').value,
+                amount: applyMultiplier(parseVal(amount.value), amountUnit.value[1]),
+                amountDim: amountUnit.value[0],
+                elements: elems,
+                set: (txt) => {
+                    amount.placeholder = txt
+                },
+            }
+        }
+
+        function extractInfo() {
+            const ingrs = []
+            let i = 0
+            for (const ing of ingredients.querySelectorAll('.solution')) {
+                const ingInfo = extractSolution(ing)
+                ingInfo.index = i
+                ingInfo.sign = 1
+                ingrs.push(ingInfo)
+                i += 1
+            }
+
+            const res = extractSolution(result.firstElementChild)
+            res.index = ingrs.length
+            res.sign = -1
+
+            const dens = {}
+            for (const elem of densityList.children) {
+                const elemName = elem.querySelector('.density-elem-name').innerText
+                const density = parseVal(elem.querySelector('[name="density"]').value)
+                if (density !== null) dens[elemName] = density
+            }
+
+            return {
+                ingredients: ingrs,
+                result: res,
+                density: (name) => name in dens ? dens[name] : null,
+            }
+        }
+
+        /// Looks like these are not actually required, but available
+        /// to be inputted.
+        function setRequiredDensities(elemList, densityMsg) {
+            const elemMap = {}
+            for (const elemName of elemList) {
+                elemMap[elemName] = true
+            }
+
+            const elemsFound = {}
+            for (let i = densityList.children.length - 1; i >= 0; i--) {
+                const oldElem = densityList.children[i]
+                const oldName = oldElem.querySelector('.density-elem-name').innerText
+                if (oldName in elemMap) {
+                    elemsFound[oldName] = true
+                } else {
+                    densityList.removeChild(oldElem)
+                }
+            }
+
+            for (const elemName of elemList) {
+                if (!elemsFound[elemName]) {
+                    // Add this element to the density requirement list
+                    const newElem = densityTemplate.content.firstElementChild.cloneNode(true)
+                    newElem.querySelector('.density-elem-name').innerText = elemName
+                    densityList.appendChild(newElem)
+                    hookRecompute(newElem)
+                }
+            }
+
+            for (const elem of densityList.children) {
+                const name = elem.querySelector('.density-elem-name').innerText
+                const density = elem.querySelector('[name="density"]')
+                density.placeholder = densityMsg[name] || ""
+            }
+        }
+
+        function recompute() {
+            // Extract information from input boxes
+            const info = extractInfo()
+            const generalIngrs = info.ingredients.concat([info.result])
+            console.log("info:", info)
+
+            // Allow the user to input the densities of the different elements
+            const simpleElemSet = {}
+            const simpleElemList = []
+            for (const ing of generalIngrs) {
+                for (const elem of ing.elements) {
+                    if (simpleElemSet[elem.name]) continue
+                    simpleElemSet[elem.name] = true
+                    simpleElemList.push(elem.name)
+                }
+            }
+
+            // Make sure concentration data is available
+            let missing = false
+            for (const ing of generalIngrs) {
+                for (const elem of ing.elements) {
+                    if (elem.concen === null) {
+                        missing = true
+                        elem.set("Concentration is required")
+                    }
+                }
+            }
+            if (missing) {
+                setRequiredDensities(simpleElemList, {})
+                return
+            }
+
+            // Add an implicit element: mass/volume
+            for (const ing of generalIngrs) {
+                ing.elements.push({
+                    name: "implicit-mass-or-volume",
+                    concen: 1,
+                    concenNumDim: ing.amountDim,
+                    concenDenDim: ing.amountDim,
+                    set: () => { },
+                })
+            }
+
+            // Make results simply negative ingredients
+            for (const ing of generalIngrs) {
+                for (const elem of ing.elements) {
+                    elem.concen *= ing.sign
+                }
+            }
+
+            // Build a list of elements
+            const elemMap = {}
+            const elemList = []
+            for (const ing of generalIngrs) {
+                for (const elem of ing.elements) {
+                    if (elem.name in elemMap) continue
+                    elemMap[elem.name] = elemList.length
+                    elemList.push(elem.name)
+                }
+            }
+
+            // Convert if amounts and concentration denominators don't match
+            const elemUnits = {}
+            const densityMessages = {}
+            for (const ing of generalIngrs) {
+                for (const elem of ing.elements) {
+                    const factor = conversionFactor(ing.amountDim, elem.concenDenDim, info.density(elem.name))
+                    if (isNaN(factor)) {
+                        // We need density information that we don't have
+                        console.log(`need density for mixed amount and concentration for element ${elem.name}`)
+                        densityMessages[elem.name] = "Density required"
+                        missing = true
+                        continue
+                    }
+
+                    elem.concen *= factor
+                    elem.concenDenDim = ing.amountDim
+
+                    if (!(elem.name in elemUnits)) elemUnits[elem.name] = {}
+                    elemUnits[elem.name][elem.concenNumDim] = true
+                }
+            }
+
+            // If using two units for the same unit, convert both to mass
+            for (const ing of generalIngrs) {
+                for (const elem of ing.elements) {
+                    if (!(elem.name in elemUnits) || !elemUnits[elem.name]['m'] || !elemUnits[elem.name]['v']) continue
+
+                    const factor = conversionFactor(elem.concenNumDim, 'm', info.density(elem.name))
+                    if (isNaN(factor)) {
+                        console.log(`element ${elem.name} has mixed numerator units and can't be converted`)
+                        densityMessages[elem.name] = "Density required"
+                        missing = true
+                        continue
+                    }
+
+                    elem.concen *= factor
+                    elem.concenNumDim = 'm'
+                }
+            }
+            setRequiredDensities(simpleElemList, densityMessages)
+            if (missing) return
+
+            for (const ing of generalIngrs) {
+                console.log(`${ing.amount} ${ing.amountDim} of mixture ${ing.name}`)
+                for (const elem of ing.elements) {
+                    console.log(`  contains ${elem.concen} ${elem.concenNumDim}/${elem.concenDenDim} concentration of element ${elem.name}`)
+                }
+            }
+
+            // Build a linear system of equations
+            const a = []
+            for (const elem of elemList) {
+                const row = []
+                for (const ing of generalIngrs) row.push(0)
+                row.push(0)
+                a.push(row)
+            }
+            let redundant = 0
+            for (const ing of generalIngrs) {
+                if (ing.amount === null) {
+                    // Unknown amount of ingredient
+                    for (const elem of ing.elements) {
+                        a[elemMap[elem.name]][ing.index] += elem.concen
+                    }
+                } else {
+                    // Known amount of ingredient
+                    for (const elem of ing.elements) {
+                        a[elemMap[elem.name]][generalIngrs.length] -= elem.concen * ing.amount
+                    }
+                    redundant += 1
+                }
+            }
+
+            // Solve system
+            const ans = []
+            const degFreedom = solveSystem(elemList.length, generalIngrs.length, a, ans)
+            console.log(`${degFreedom} degrees of freedom with one solution being`, ans)
+
+            // Report result
+            if (degFreedom >= 0) {
+                for (const ing of generalIngrs) {
+                    if (ing.amount === null) {
+                        const prec = 100
+                        let x = ans[ing.index]
+                        let s = (Math.round(x * prec) / prec).toString()
+                        if (degFreedom > redundant) s += '?'
+                        if (x < 0) s += '!'
+                        ing.set(s)
+                    }
+                }
+            } else {
+                for (const ing of generalIngrs) {
+                    if (ing.amount === null) {
+                        ing.set("!")
+                    }
+                }
+            }
+        }
+
+        function hookRecompute(elem) {
+            for (const c of elem.getElementsByTagName('input')) {
+                c.addEventListener('change', recompute)
+            }
+            for (const c of elem.getElementsByTagName('select')) {
+                c.addEventListener('change', recompute)
+            }
+        }
+
+        function createSolution(name) {
+            const sol = solTemplate.content.firstElementChild.cloneNode(true)
+            sol.querySelector('.solution-name').value = name
+            const elems = sol.querySelector(".element-list")
+            function addElement(dontRecompute) {
+                const newElem = elemTemplate.content.firstElementChild.cloneNode(true)
+                elems.insertBefore(newElem, elems.lastElementChild)
+                hookRecompute(newElem)
+                if (!dontRecompute) recompute()
+            }
+            addElement(true)
+            sol.querySelector('.add-element').addEventListener('click', () => addElement())
+            hookRecompute(sol)
+            return sol
+        }
+
+        function addIngredient(dontRecompute) {
+            const name = `Mixture #${ingredients.children.length}`
+            ingredients.insertBefore(createSolution(name), ingredients.lastElementChild)
+            if (!dontRecompute) recompute()
+        }
+
+        function onLoad() {
+            solTemplate = document.getElementById('sol-template')
+            elemTemplate = document.getElementById('elem-template')
+            densityTemplate = document.getElementById('density-template')
+            ingredients = document.getElementById('ingredients')
+            result = document.getElementById('result')
+            densityList = document.getElementById('density-list')
+
+            ingredients.lastElementChild.addEventListener('click', () => addIngredient())
+
+            addIngredient(true)
+            result.appendChild(createSolution("Result"))
+
+            recompute()
+        }
+        window.addEventListener('load', onLoad)
+    </script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Gill Sans', 'Gill Sans MT', Calibri, 'Trebuchet MS', sans-serif;
+        }
+
+        input {
+            margin: 0;
+        }
+
+        select {
+            margin: 0;
+        }
+
+        .add-solution {
+            height: 30px;
+            padding: 0 10px;
+            display: block;
+            background: lightgray;
+            border: 1px solid darkgray;
+            border-radius: 4px;
+        }
+
+        .add-solution:active {
+            background: darkgray;
+            border: 1px solid lightgray;
+        }
+
+        .add-element {
+            padding: 0 10px;
+            height: 20px;
+            display: block;
+            background: lavenderblush;
+            border: 1px solid lavender;
+            border-radius: 4px;
+        }
+
+        .add-element:active {
+            background: gray;
+            border: 1px solid darkgray;
+        }
+
+        .element {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .solution-input {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .solution-list {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 25px;
+        }
+
+        .solution {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background-color: lightblue;
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .solution-name {
+            background: none;
+            border: 0;
+            border-radius: 4px;
+        }
+
+        .element-list {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            margin-left: 40px;
+        }
+
+        .density-elem-name {
+            background-color: lightgray;
+            border-radius: 4px;
+            padding: 0 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <template id="elem-template">
+        <div class="element">
+            <div class="solution-input">
+                <span>Element name</span>
+                <input name="element" type="text" />
+            </div>
+            <div class="solution-input">
+                <span>Concentration</span>
+                <div>
+                    <input name="concen" type="number" />
+                    <select name="concen-unit">
+                        <!--option value="mmc">g/100g</option-->
+                        <!--option value="mvc">g/100mL</option-->
+                        <!--option value="vvm">ml/L</option-->
+                        <option value="vvc">mL/100mL</option>
+                        <option value="mvm">g/L</option>
+                        <option value="mmm">g/kg</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <template id="sol-template">
+        <div class="solution">
+            <div>
+                <input name="solution-name" type="text" class="solution-name" />
+            </div>
+            <div class="solution-amount">
+                <span>Amount</span>
+                <div>
+                    <input name="amount" type="number" />
+                    <select name="amount-unit">
+                        <option value="vx">mL</option>
+                        <option value="vK">L</option>
+                        <option value="mx">g</option>
+                        <option value="mK">kg</option>
+                    </select>
+                </div>
+            </div>
+            <div class="element-list">
+                <button class="add-element">Add element</button>
+            </div>
+        </div>
+    </template>
+
+    <template id="density-template">
+        <div class="density">
+            Density of <span class="density-elem-name">element</span>:
+            <input name="density" placeholder="Element density is required" />
+            g/mL
+        </div>
+    </template>
+
+    <h1>Liqalc</h1>
+    <div>
+        <h2>Ingredients</h2>
+        <div id="ingredients" class="solution-list">
+            <button id="add-ingredient" class="add-solution">
+                Add ingredient
+            </button>
+        </div>
+        <br />
+
+        <h2>Result</h2>
+        <div id="result" class="solution-list">
+        </div>
+        <br />
+
+        <h2>Elements</h2>
+        <div id="density-list" class="density-list">
+        </div>
+    </div>
+</body>
+
+</html>
