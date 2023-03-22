@@ -250,7 +250,8 @@
             const densityMessages = {}
             for (const ing of generalIngrs) {
                 for (const elem of ing.elements) {
-                    const factor = conversionFactor(ing.amountDim, elem.concenDenDim, info.density(elem.name))
+                    const density = elem.name === massElement ? ing.density : info.density(elem.name)
+                    const factor = conversionFactor(ing.amountDim, elem.concenDenDim, density)
                     if (isNaN(factor)) {
                         // We need density information that we don't have
                         console.log(`need density for mixed amount and concentration for element ${elem.name}`)
@@ -264,16 +265,17 @@
                     elem.concenDenDim = ing.amountDim
 
                     if (!(elem.name in elemUnits)) elemUnits[elem.name] = {}
-                    elemUnits[elem.name][elem.concenNumDim] = (elemUnits[elem.name][elem.concenNumDim] || 0) + 1
+                    elemUnits[elem.name][elem.concenNumDim] = elemUnits[elem.name][elem.concenNumDim] || 0
+                    if (isNaN(density)) elemUnits[elem.name][elem.concenNumDim] += 1
                 }
             }
 
             // If using two units for the same unit, convert both to whichever is more common
             for (const ing of generalIngrs) {
                 for (const elem of ing.elements) {
-                    if (!(elem.name in elemUnits) || !elemUnits[elem.name]['m'] || !elemUnits[elem.name]['v']) continue
+                    if (!(elem.name in elemUnits) || !('m' in elemUnits[elem.name]) || !('v' in elemUnits[elem.name])) continue
 
-                    const convTo = elemUnits[elem.name]['m'] < elemUnits[elem.name]['v'] ? 'v' : 'm'
+                    const convTo = elemUnits[elem.name]['m'] < elemUnits[elem.name]['v'] ? 'm' : 'v'
                     const density = elem.name === massElement ? ing.density : info.density(elem.name)
 
                     const factor = conversionFactor(elem.concenNumDim, convTo, density)
@@ -381,11 +383,17 @@
             const mixt = mixtTemplate.content.firstElementChild.cloneNode(true)
             mixt.querySelector('.mixture-name').value = name
             const elems = mixt.querySelector(".element-list")
+            function removeElement(elem) {
+                if (elem.previousElementSibling === null && elem.nextElementSibling === elems.lastElementChild) return
+                elems.removeChild(elem)
+                setTimeout(recompute, 0)
+            }
             function addElement(dontRecompute) {
                 const newElem = elemTemplate.content.firstElementChild.cloneNode(true)
                 elems.insertBefore(newElem, elems.lastElementChild)
+                newElem.querySelector('.remove-element').addEventListener('click', () => removeElement(newElem))
                 hookRecompute(newElem)
-                if (!dontRecompute) recompute()
+                if (!dontRecompute) setTimeout(recompute, 0)
             }
             addElement(true)
             mixt.querySelector('.add-element').addEventListener('click', () => addElement())
@@ -393,10 +401,18 @@
             return mixt
         }
 
+        function removeIngredient(ing) {
+            if (ing.previousElementSibling === null && ing.nextElementSibling === ingredients.lastElementChild) return
+            ingredients.removeChild(ing)
+            setTimeout(recompute, 0)
+        }
+
         function addIngredient(dontRecompute) {
             const name = `Mixture #${ingredients.children.length}`
-            ingredients.insertBefore(createMixture(name), ingredients.lastElementChild)
-            if (!dontRecompute) recompute()
+            const ing = createMixture(name)
+            ing.querySelector('.remove-mixture').addEventListener('click', () => removeIngredient(ing))
+            ingredients.insertBefore(ing, ingredients.lastElementChild)
+            if (!dontRecompute) setTimeout(recompute, 0)
         }
 
         function onLoad() {
@@ -413,7 +429,7 @@
             addIngredient(true)
             result.appendChild(createMixture("Result"))
 
-            recompute()
+            setTimeout(recompute, 0)
         }
         window.addEventListener('load', onLoad)
     </script>
@@ -433,32 +449,40 @@
             margin: 0;
         }
 
-        .add-mixture {
-            height: 30px;
-            padding: 0 10px;
-            display: block;
+        .mixture-button {
             background: lightgray;
             border: 1px solid darkgray;
             border-radius: 4px;
         }
 
-        .add-mixture:active {
+        .mixture-button:active {
             background: darkgray;
             border: 1px solid lightgray;
         }
 
-        .add-element {
+        .add-mixture {
+            height: 30px;
             padding: 0 10px;
-            height: 20px;
-            display: block;
+        }
+
+        .element-button {
             background: lavenderblush;
             border: 1px solid lavender;
             border-radius: 4px;
         }
 
-        .add-element:active {
+        .element-button:active {
             background: gray;
             border: 1px solid darkgray;
+        }
+
+        .add-element {
+            padding: 0 10px;
+            height: 20px;
+        }
+
+        .remove-element {
+            margin-bottom: 1px;
         }
 
         .element {
@@ -469,7 +493,7 @@
         .element-row {
             display: flex;
             flex-direction: row;
-            align-items: center;
+            align-items: flex-end;
             gap: 10px;
         }
 
@@ -493,6 +517,13 @@
             background-color: lightblue;
             border-radius: 4px;
             padding: 10px;
+        }
+
+        .mixture-toolbar {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            padding-right: 10px;
         }
 
         .mixture-name {
@@ -544,6 +575,7 @@
                         </select>
                     </div>
                 </div>
+                <button class="remove-element element-button">✖</button>
             </div>
             <div class="error element-error"></div>
         </div>
@@ -552,8 +584,9 @@
     <template id="mixt-template">
         <div class="mixture">
             <div class="error mixture-error"></div>
-            <div>
+            <div class="mixture-toolbar">
                 <input name="mixture-name" type="text" class="mixture-name" />
+                <button class="remove-mixture mixture-button">✖</button>
             </div>
             <div class="mixture-amount">
                 <span>Amount</span>
@@ -568,7 +601,7 @@
                 </div>
             </div>
             <div class="element-list">
-                <button class="add-element">Add element</button>
+                <button class="add-element element-button">Add element</button>
             </div>
         </div>
     </template>
@@ -585,7 +618,7 @@
     <div>
         <h2>Ingredients</h2>
         <div id="ingredients" class="mixture-list">
-            <button id="add-ingredient" class="add-mixture">
+            <button id="add-ingredient" class="add-mixture mixture-button">
                 Add ingredient
             </button>
         </div>
