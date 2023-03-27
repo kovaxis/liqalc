@@ -275,7 +275,7 @@
                 for (const elem of ing.elements) {
                     if (!(elem.name in elemUnits) || !('m' in elemUnits[elem.name]) || !('v' in elemUnits[elem.name])) continue
 
-                    const convTo = elemUnits[elem.name]['m'] < elemUnits[elem.name]['v'] ? 'm' : 'v'
+                    const convTo = elemUnits[elem.name]['m'] < elemUnits[elem.name]['v'] ? 'v' : 'm'
                     const density = elem.name === massElement ? ing.density : info.density(elem.name)
 
                     const factor = conversionFactor(elem.concenNumDim, convTo, density)
